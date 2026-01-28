@@ -13,8 +13,11 @@
     const transcriptRef = useRef<string>("")
     const [transcript,setTranscript] = useState("")
     const [aiReply,setAiReply] = useState("")
+    
+    
+    //optimization
+    const sentenceQueueRef = useRef<string[]>([]);
     const isSpeakingRef = useRef(false);
-
 
 
     const sendAi = async(text:string) => {
@@ -37,26 +40,56 @@
           if (!line.trim()) return;
 
           const json = JSON.parse(line);
+          
           if(!json.response) return;
+          
+          
           setAiReply((prev) => prev + json.response);
           sentenceBuffer += json.response
+          const sentences = sentenceBuffer.match(/[^.!?]+[.!?]+/g)
 
-          const match = sentenceBuffer.match(/(.+?[.!?])(\s|$)/);
-
-          if (match && !isSpeakingRef.current) {
-            const sentence = match[1];
-
-            isSpeakingRef.current = true;
-            speak(sentence);
-
-            sentenceBuffer = sentenceBuffer.slice(sentence.length);
+          if(sentences){
+            sentences.forEach(element => {
+              sentenceQueueRef.current.push(element.trim())
+            });
+            sentenceBuffer = sentenceBuffer.replace(sentences.join(""),"")
+            if(!isSpeakingRef.current){
+              speakNext()
+            }
           }
+
+          
         });
       }
       if(sentenceBuffer.trim()){
-        speak(sentenceBuffer)
+        sentenceQueueRef.current.push(sentenceBuffer.trim())
+        if(!isSpeakingRef.current){
+          speakNext()
+        }
       }
 
+    }
+
+
+    const speakNext = () => {
+      if(sentenceQueueRef.current.length === 0) return
+      const sentence = sentenceQueueRef.current.shift() 
+      if(!sentence) return
+      isSpeakingRef.current = true
+      const utterance = new SpeechSynthesisUtterance(sentence)
+      utterance.lang = "en-US"
+
+      utterance.onend = () => {
+        isSpeakingRef.current = false
+        speakNext()
+      }
+
+      utterance.onerror = () => {
+        isSpeakingRef.current = false
+        speakNext()
+      }
+
+      window.speechSynthesis.speak(utterance)
     }
 
 
