@@ -1,65 +1,102 @@
-import Image from "next/image";
+"use client"
+
+import { isRedirectError } from "next/dist/client/components/redirect-error"
+import { useEffect, useRef } from "react"
 
 export default function Home() {
+  const mediaRecorderRef = useRef<MediaRecorder | null>(null)
+  const audioChunks = useRef<Blob[]>([])
+  const isRecordingRef = useRef(false)
+  const audioUrlRef = useRef<string | null>(null)
+  const recognitionRef = useRef<any>(null)
+  const transcriptRef = useRef<string>("")
+
+
+  useEffect(()=>{
+    
+    const SpeechRecognition = (window as any).SpeechRecognition || (window as any).webkitSpeechRecognition
+    if(!SpeechRecognition){
+      console.log("snot suppoerted")
+      return
+    }
+
+    const recognition = new SpeechRecognition()
+    recognition.lang = "en-US"
+    recognition.interimResults = false
+    recognition.continuous = false
+
+    recognition.onresult = (e : any) => {
+      const text = e.results[0][0].transcript
+      console.log("TRANs : ",text)
+    }
+
+    recognition.onerror = (e :any) => {
+      console.log("STT error",e)
+    }
+
+    recognitionRef.current = recognition
+  },[])
+
+  const startRecording = async () => {
+    try {
+      const stream = await navigator.mediaDevices.getUserMedia({audio : true})
+      console.log("permission granre",stream)
+      
+      const mediaRecorder = new MediaRecorder(stream)
+      mediaRecorderRef.current = mediaRecorder
+      audioChunks.current = []
+
+      mediaRecorder.ondataavailable = (e : BlobEvent) => {
+        audioChunks.current.push(e.data)
+        console.log("chunks")
+      }
+
+      mediaRecorder.onstop = () => {
+        const audioBlob = new Blob(audioChunks.current,{
+          type : "audio/webm",
+        })
+        const audioUrl = URL.createObjectURL(audioBlob)
+        audioUrlRef.current = audioUrl
+        console.log("audio blob == ",audioUrl)
+      }
+
+
+      mediaRecorder.start()
+      isRecordingRef.current = true
+      recognitionRef.current?.start()
+      console.log("recording...")
+    } catch (error) {
+      console.log("mic permisson denied")
+    }
+
+  }
+  
+  const stopRecording = async() => {
+    if(!mediaRecorderRef.current) return
+    if(!isRecordingRef.current) return
+    isRecordingRef.current = false
+    mediaRecorderRef.current.stop()
+    recognitionRef.current?.stop()
+    console.log("recording stopped")
+  }
+
+  const playRecording = async() => {
+    if(!audioUrlRef.current) return
+    const audio = new Audio(audioUrlRef.current)
+    audio.play()
+  }
+
+
   return (
-    <div className="flex min-h-screen items-center justify-center bg-zinc-50 font-sans dark:bg-black">
-      <main className="flex min-h-screen w-full max-w-3xl flex-col items-center justify-between py-32 px-16 bg-white dark:bg-black sm:items-start">
-        <Image
-          className="dark:invert"
-          src="/next.svg"
-          alt="Next.js logo"
-          width={100}
-          height={20}
-          priority
-        />
-        <div className="flex flex-col items-center gap-6 text-center sm:items-start sm:text-left">
-          <h1 className="max-w-xs text-3xl font-semibold leading-10 tracking-tight text-black dark:text-zinc-50">
-            To get started, edit the page.tsx file.
-          </h1>
-          <p className="max-w-md text-lg leading-8 text-zinc-600 dark:text-zinc-400">
-            Looking for a starting point or more instructions? Head over to{" "}
-            <a
-              href="https://vercel.com/templates?framework=next.js&utm_source=create-next-app&utm_medium=appdir-template-tw&utm_campaign=create-next-app"
-              className="font-medium text-zinc-950 dark:text-zinc-50"
-            >
-              Templates
-            </a>{" "}
-            or the{" "}
-            <a
-              href="https://nextjs.org/learn?utm_source=create-next-app&utm_medium=appdir-template-tw&utm_campaign=create-next-app"
-              className="font-medium text-zinc-950 dark:text-zinc-50"
-            >
-              Learning
-            </a>{" "}
-            center.
-          </p>
-        </div>
-        <div className="flex flex-col gap-4 text-base font-medium sm:flex-row">
-          <a
-            className="flex h-12 w-full items-center justify-center gap-2 rounded-full bg-foreground px-5 text-background transition-colors hover:bg-[#383838] dark:hover:bg-[#ccc] md:w-[158px]"
-            href="https://vercel.com/new?utm_source=create-next-app&utm_medium=appdir-template-tw&utm_campaign=create-next-app"
-            target="_blank"
-            rel="noopener noreferrer"
-          >
-            <Image
-              className="dark:invert"
-              src="/vercel.svg"
-              alt="Vercel logomark"
-              width={16}
-              height={16}
-            />
-            Deploy Now
-          </a>
-          <a
-            className="flex h-12 w-full items-center justify-center rounded-full border border-solid border-black/[.08] px-5 transition-colors hover:border-transparent hover:bg-black/[.04] dark:border-white/[.145] dark:hover:bg-[#1a1a1a] md:w-[158px]"
-            href="https://nextjs.org/docs?utm_source=create-next-app&utm_medium=appdir-template-tw&utm_campaign=create-next-app"
-            target="_blank"
-            rel="noopener noreferrer"
-          >
-            Documentation
-          </a>
-        </div>
-      </main>
+    <div className=" flex justify-center items-center h-screen gap-1">
+      <button className="h-40 w-40 bg-slate-500 " 
+        onMouseDown={startRecording}
+        onMouseUp={stopRecording}
+        onMouseLeave={stopRecording}
+        onTouchStart={startRecording}
+        onTouchEnd={stopRecording}
+      >record</button>
+      <button className="bg-slate-600 h-40 w-40" onClick={playRecording}>play</button>
     </div>
   );
 }
