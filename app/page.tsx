@@ -13,6 +13,9 @@
     const transcriptRef = useRef<string>("")
     const [transcript,setTranscript] = useState("")
     const [aiReply,setAiReply] = useState("")
+    const isSpeakingRef = useRef(false);
+
+
 
     const sendAi = async(text:string) => {
       setAiReply("")
@@ -22,23 +25,38 @@
         body : JSON.stringify({text})
       })
       const reader = res.body!.getReader();
-  const decoder = new TextDecoder();
+      const decoder = new TextDecoder();
+      let sentenceBuffer = "";
+      while (true) {
+        const { value, done } = await reader.read();
+        if (done) break;
 
-  while (true) {
-      const { value, done } = await reader.read();
-      if (done) break;
+        const chunk = decoder.decode(value);
 
-      const chunk = decoder.decode(value);
+        chunk.split("\n").forEach((line) => {
+          if (!line.trim()) return;
 
-      chunk.split("\n").forEach((line) => {
-      if (!line.trim()) return;
+          const json = JSON.parse(line);
+          if(!json.response) return;
+          setAiReply((prev) => prev + json.response);
+          sentenceBuffer += json.response
 
-      const json = JSON.parse(line);
-      if (json.response) {
-            setAiReply((prev) => prev + json.response);
+          const match = sentenceBuffer.match(/(.+?[.!?])(\s|$)/);
+
+          if (match && !isSpeakingRef.current) {
+            const sentence = match[1];
+
+            isSpeakingRef.current = true;
+            speak(sentence);
+
+            sentenceBuffer = sentenceBuffer.slice(sentence.length);
           }
         });
       }
+      if(sentenceBuffer.trim()){
+        speak(sentenceBuffer)
+      }
+
     }
 
 
@@ -118,6 +136,34 @@
       audio.play()
     }
 
+    const speak = (text: string) => {
+      if (!text) return;
+
+      window.speechSynthesis.cancel();
+
+      const utterance = new SpeechSynthesisUtterance(text);
+      utterance.lang = "en-US";
+
+      utterance.onend = () => {
+        isSpeakingRef.current = false;
+      };
+
+      utterance.onerror = () => {
+        isSpeakingRef.current = false;
+      };
+
+      window.speechSynthesis.speak(utterance);
+    };
+
+    const speakSentence = (text: string) => {
+      if (!text.trim()) return;
+      window.speechSynthesis.cancel();
+      const utterance = new SpeechSynthesisUtterance(text);
+      utterance.lang = "en-US";
+      window.speechSynthesis.speak(utterance);
+    };
+
+
 
     return (
       <div className="h-screen">
@@ -130,6 +176,7 @@
             onTouchEnd={stopRecording}
           >record</button>
           <button className="bg-slate-600 h-40 w-40" onClick={playRecording}>play</button>
+          <button className="bg-slate-600 h-40 w-40" onClick={()=>speak(" hello yuvraj")}>test</button>
         </div>
         <p className="flex items-center justify-center ">
           {transcript || "speak"}
