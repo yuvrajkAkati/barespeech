@@ -13,8 +13,9 @@
     const transcriptRef = useRef<string>("")
     const [transcript,setTranscript] = useState("")
     const [aiReply,setAiReply] = useState("")
-    
-    
+    const abortControllerRef = useRef<AbortController | null>(null)
+    const generationRef = useRef(0);
+
     //optimization
     const sentenceQueueRef = useRef<string[]>([]);
     const isSpeakingRef = useRef(false);
@@ -22,51 +23,74 @@
 
     const sendAi = async(text:string) => {
       setAiReply("")
+      abortControllerRef.current = new AbortController()
+      const currentGeneration = ++generationRef.current;
+
       const res = await fetch("/api/ai",{
         method : "POST",
         headers : {"Content-Type" : "application/json"},
-        body : JSON.stringify({text})
+        body : JSON.stringify({text}),
+        signal : abortControllerRef.current.signal
       })
       const reader = res.body!.getReader();
       const decoder = new TextDecoder();
       let sentenceBuffer = "";
-      while (true) {
-        const { value, done } = await reader.read();
-        if (done) break;
+      let jsonBuffer = ""
+      let aborted = false
+      try {
+  while (true) {
+    const { value, done } = await reader.read();
+    if (done) break;
 
-        const chunk = decoder.decode(value);
+    const chunk = decoder.decode(value);
+    jsonBuffer += chunk;
 
-        chunk.split("\n").forEach((line) => {
-          if (!line.trim()) return;
+    const lines = jsonBuffer.split("\n");
+    jsonBuffer = lines.pop() || "";
 
-          const json = JSON.parse(line);
-          
-          if(!json.response) return;
-          
-          
-          setAiReply((prev) => prev + json.response);
-          sentenceBuffer += json.response
-          const sentences = sentenceBuffer.match(/[^.!?]+[.!?]+/g)
+    lines.forEach((line) => {
+      if (!line.trim()) return;
 
-          if(sentences){
-            sentences.forEach(element => {
-              sentenceQueueRef.current.push(element.trim())
-            });
-            sentenceBuffer = sentenceBuffer.replace(sentences.join(""),"")
-            if(!isSpeakingRef.current){
-              speakNext()
-            }
-          }
-
-          
-        });
+      if (generationRef.current !== currentGeneration) {
+        aborted = true;
+        return;
       }
-      if(sentenceBuffer.trim()){
-        sentenceQueueRef.current.push(sentenceBuffer.trim())
-        if(!isSpeakingRef.current){
-          speakNext()
+
+      const json = JSON.parse(line);
+      if (!json.response) return;
+
+      // ❌ STOP if aborted
+      if (abortControllerRef.current?.signal.aborted) {
+        aborted = true
+        return 
+      };
+
+      setAiReply((prev) => prev + json.response);
+      sentenceBuffer += json.response;
+
+      const sentences = sentenceBuffer.match(/[^.!?]+[.!?]+/g);
+      if (sentences) {
+        sentences.forEach((s) =>
+          sentenceQueueRef.current.push(s.trim())
+        );
+
+        sentenceBuffer = sentenceBuffer.replace(sentences.join(""), "");
+
+        if (!isSpeakingRef.current) {
+          speakNext();
         }
       }
+    });
+    if(aborted) break
+  }
+} catch (err: any) {
+  if (err.name === "AbortError") {
+    console.log("AI stream aborted");
+    return;
+  }
+  throw err;
+}
+
 
     }
 
@@ -121,6 +145,12 @@
     },[])
 
     const startRecording = async () => {
+      abortControllerRef.current?.abort()
+      abortControllerRef.current = null
+
+      window.speechSynthesis.cancel()
+      sentenceQueueRef.current = []
+      isSpeakingRef.current = false
       try {
         const stream = await navigator.mediaDevices.getUserMedia({audio : true})
         console.log("permission granre",stream)

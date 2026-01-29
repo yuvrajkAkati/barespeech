@@ -31,7 +31,6 @@ export function buildContext(sessionId : string,maxMessages : number) : Message[
     // const lastMessages = nonSystemMessage.slice(-maxMessages)
     const lastMessages = nonSystemMessage.slice(-maxMessages)
     console.log("asd")
-        console.log("asd")
 
     return [systemMessage,...lastMessages]
 }
