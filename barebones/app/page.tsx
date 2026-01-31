@@ -15,13 +15,14 @@
     const [aiReply,setAiReply] = useState("")
     const abortControllerRef = useRef<AbortController | null>(null)
     const generationRef = useRef(0);
-
+    const aiInProgressRef = useRef(false)
     //optimization
     const sentenceQueueRef = useRef<string[]>([]);
     const isSpeakingRef = useRef(false);
 
 
     const sendAi = async(text:string) => {
+      aiInProgressRef.current = true;
       setAiReply("")
       abortControllerRef.current = new AbortController()
       const currentGeneration = ++generationRef.current;
@@ -89,6 +90,8 @@
     return;
   }
   throw err;
+}finally{
+  aiInProgressRef.current = false
 }
 
 
@@ -145,12 +148,19 @@
     },[])
 
     const startRecording = async () => {
+      
+      if (aiInProgressRef.current) {
+        fetch("/api/reset", { method: "POST" });
+      }
+
       abortControllerRef.current?.abort()
       abortControllerRef.current = null
 
       window.speechSynthesis.cancel()
       sentenceQueueRef.current = []
       isSpeakingRef.current = false
+
+
       try {
         const stream = await navigator.mediaDevices.getUserMedia({audio : true})
         console.log("permission granre",stream)

@@ -1,5 +1,5 @@
 import { NextResponse } from "next/server";
-import {getConversation,appendConversation,buildContext} from "./conversationStore"
+import {getConversation,appendConversation,buildContext, markLastUserMessage} from "./conversationStore"
 
 export async function POST(req: Request) {
   console.log("ai route hit")
@@ -8,7 +8,8 @@ export async function POST(req: Request) {
   const sessionId = "default"
   appendConversation(sessionId,{
     role : "user",
-    content : text
+    content : text,
+    committed : false
   })
   console.log(getConversation(sessionId))
   
@@ -43,17 +44,41 @@ export async function POST(req: Request) {
       while (true) {
         const { value, done } = await reader.read();
         if (done) break;
-        const chunk = decoder.decode(value)
-        assistantReply += chunk
-        controller.enqueue(chunk);
+        let buffer = "";
+
+while (true) {
+  const { value, done } = await reader.read();
+  if (done) break;
+
+  buffer += decoder.decode(value);
+
+  const lines = buffer.split("\n");
+  buffer = lines.pop() || "";
+
+  for (const line of lines) {
+    if (!line.trim()) continue;
+
+    const json = JSON.parse(line);
+    if (!json.response) continue;
+
+    assistantReply += json.response;
+controller.enqueue(
+  JSON.stringify({ response: json.response }) + "\n"
+);  }
+}
       }
       appendConversation(sessionId,{
         role : "assistant",
-        content : assistantReply
+        content : assistantReply,
       })
+
+      markLastUserMessage(sessionId);
+      
       controller.close();
     },
   });
 
   return new Response(stream);
 }
+
+

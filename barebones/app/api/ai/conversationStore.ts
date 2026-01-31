@@ -27,10 +27,44 @@ export function buildContext(sessionId : string,maxMessages : number) : Message[
     if(!systemMessage){
         throw new Error("System message not found")
     }
-    const nonSystemMessage = fullConversation.filter((msg)=>msg.role != "system")
+    const nonSystemMessage = fullConversation.filter((msg, idx, arr) => {
+    if (msg.role === "system") return false;
+
+    // Always include the most recent user message
+    if (
+        msg.role === "user" &&
+        idx === arr.length - 1
+    ) {
+        return true;
+    }
+
+    // Include only committed messages otherwise
+    return msg.committed !== false;
+    });  
     // const lastMessages = nonSystemMessage.slice(-maxMessages)
     const lastMessages = nonSystemMessage.slice(-maxMessages)
     console.log("asd")
 
     return [systemMessage,...lastMessages]
+}
+
+export function markLastUserMessage (sessionId : string){
+    const convo = getConversation(sessionId)
+
+    for(let i = convo.length -1; i >= 0 ;i--){
+        if(convo[i].role == "user" && convo[i].committed === false){
+            convo[i].committed = true;
+            return
+        }
+    }
+}
+
+export function rollbackUncommitted(sessionId: string) {
+  const convo = getConversation(sessionId);
+
+  for (let i = convo.length - 1; i >= 1; i--) {
+    if (convo[i].committed === false) {
+      convo.splice(i, 1);
+    }
+  }
 }
