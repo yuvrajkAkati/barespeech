@@ -41,32 +41,31 @@ export async function POST(req: Request) {
       const reader = res.body!.getReader();
       const decoder = new TextDecoder();
 
+      let buffer = "";
+
       while (true) {
         const { value, done } = await reader.read();
         if (done) break;
-        let buffer = "";
 
-while (true) {
-  const { value, done } = await reader.read();
-  if (done) break;
+        buffer += decoder.decode(value, { stream: true });
 
-  buffer += decoder.decode(value);
+        const lines = buffer.split("\n");
+        buffer = lines.pop() || "";
 
-  const lines = buffer.split("\n");
-  buffer = lines.pop() || "";
+        for (const line of lines) {
+          if (!line.trim()) continue;
 
-  for (const line of lines) {
-    if (!line.trim()) continue;
+          const json = JSON.parse(line);
+          if (!json.response) continue;
 
-    const json = JSON.parse(line);
-    if (!json.response) continue;
+          assistantReply += json.response;
 
-    assistantReply += json.response;
-controller.enqueue(
-  JSON.stringify({ response: json.response }) + "\n"
-);  }
-}
+          controller.enqueue(
+            JSON.stringify({ response: json.response }) + "\n"
+          );
+        }
       }
+
       appendConversation(sessionId,{
         role : "assistant",
         content : assistantReply,
