@@ -21,6 +21,52 @@
     const isSpeakingRef = useRef(false);
 
 
+
+    //ws  logic 
+    const wsRef = useRef<WebSocket | null>(null)
+
+    useEffect(()=>{
+      const ws = new WebSocket("ws://localhost:3001")
+      ws.onopen=()=>{
+        ws.send(
+          JSON.stringify({
+            type : "hello",
+            sessionId : "default"
+          })
+        )
+      }
+      
+      ws.onmessage=(e)=>{
+        const msg = JSON.parse(e.data)
+        console.log("WS:",msg)
+      }
+
+      ws.onerror=(e)=>{
+        console.error("error on frontend")
+      }
+
+      ws.onclose = (e) =>{
+        console.log("closed")
+      }
+
+      wsRef.current = ws
+
+      return ()=>{
+        ws.close()
+      }
+
+    },[])
+
+    const interrupt = () => {
+      wsRef.current?.send(
+        JSON.stringify({
+          type : "interrupt"
+        })
+      )
+    }
+
+
+    //ws logic
     const sendAi = async(text:string) => {
       aiInProgressRef.current = true;
       setAiReply("")
@@ -250,6 +296,7 @@
           >record</button>
           <button className="bg-slate-600 h-40 w-40" onClick={playRecording}>play</button>
           <button className="bg-slate-600 h-40 w-40" onClick={()=>speak(" hello yuvraj")}>test</button>
+          <button className="bg-slate-600 h-40 w-40" onClick={interrupt}>interrupt</button>
         </div>
         <p className="flex items-center justify-center ">
           {transcript || "speak"}
