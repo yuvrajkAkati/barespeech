@@ -1,3 +1,4 @@
+import WebSocket from "ws";
 export class EventBus {
     handlers = new Map();
     on(type, handler) {
@@ -10,9 +11,7 @@ export class EventBus {
         const handlers = this.handlers.get(type);
         if (!handlers)
             return;
-        handlers.forEach(element => {
-            element(payload);
-        });
+        handlers.forEach((h) => h(payload));
     }
 }
 //# sourceMappingURL=events.js.map

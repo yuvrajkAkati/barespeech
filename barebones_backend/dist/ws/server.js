@@ -1,40 +1,59 @@
 import { WebSocketServer } from "ws";
 import { EventBus } from "./events.js";
+import { Session } from "./session.js";
 function send(socket, payload) {
     socket.send(JSON.stringify(payload));
 }
+const sessions = new Map();
 export function startWebServer(port = 3001) {
     const wss = new WebSocketServer({ port });
     const bus = new EventBus();
     wss.on("connection", (socket) => {
-        console.log("connect");
-        socket.on("message", (r) => {
+        console.log("connected");
+        socket.on("message", (raw) => {
             try {
-                const msg = JSON.parse(r.toString());
+                const msg = JSON.parse(raw.toString());
                 bus.emit(msg.type, { socket, msg });
             }
             catch {
-                send(socket, {
-                    type: "error",
-                    message: "Invalid"
-                });
+                send(socket, { type: "error", message: "Invalid WS message" });
             }
         });
         socket.on("close", () => {
-            console.log("discconected");
+            for (const [id, session] of sessions.entries()) {
+                if (session.socket === socket) {
+                    session.interrupt();
+                    sessions.delete(id);
+                    break;
+                }
+            }
+            console.log("disconnected");
         });
     });
+    // ---------------- EVENTS ----------------
     bus.on("hello", ({ socket, msg }) => {
-        console.log("Session", msg.sessionId);
+        if (msg.type !== "hello")
+            return;
+        const session = new Session(socket);
+        sessions.set(msg.sessionId, session);
+        console.log("Session:", msg.sessionId);
         send(socket, { type: "ack" });
     });
     bus.on("interrupt", ({ socket }) => {
+        const session = [...sessions.values()].find((s) => s.socket === socket);
+        if (!session)
+            return;
         console.log("interrupted");
-        send(socket, { type: "audio_stop" });
+        session.interrupt();
     });
-    bus.on("user_message", ({ msg }) => {
-        console.log("User says:", msg.text);
+    bus.on("user_message", ({ socket, msg }) => {
+        if (msg.type !== "user_message")
+            return;
+        const session = [...sessions.values()].find((s) => s.socket === socket);
+        if (!session)
+            return;
+        session.startLLM((signal) => session.runOllama(msg.text, signal));
     });
-    console.log("ws server running");
+    console.log(`WS server running on ws://localhost:${port}`);
 }
 //# sourceMappingURL=server.js.map
