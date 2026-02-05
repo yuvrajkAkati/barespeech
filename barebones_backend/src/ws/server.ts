@@ -38,7 +38,7 @@ export function startWebServer(port = 3001) {
     });
   });
 
-  // ---------------- EVENTS ----------------
+  // EVENTS 
 
   bus.on("hello", ({ socket, msg }) => {
   if (msg.type !== "hello") return;

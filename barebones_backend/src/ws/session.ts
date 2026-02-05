@@ -21,7 +21,6 @@ export class Session {
     this.controller = new AbortController();
 
     streamFn(this.controller.signal).catch((err) => {
-      // 🔑 THIS IS THE FIX
       if (err.name === "AbortError") {
         console.log("LLM generation aborted cleanly");
         return;
@@ -33,14 +32,13 @@ export class Session {
   interrupt() {
     console.log("Session interrupted");
 
-    // stop generation
     this.controller?.abort();
     this.controller = undefined;
 
-    // stop tokens
+    
     this.queue.stop();
 
-    // tell client to stop audio
+    
     this.socket.send(JSON.stringify({ type: "audio_stop" }));
   }
 

@@ -1,7 +1,5 @@
   "use client"
 
-  import { isRedirectError } from "next/dist/client/components/redirect-error"
-  import { useSearchParams } from "next/navigation"
   import { useEffect, useRef, useState } from "react"
 
   export default function Home() {
@@ -19,12 +17,36 @@
     //optimization
     const sentenceQueueRef = useRef<string[]>([]);
     const isSpeakingRef = useRef(false);
+    
+    //prompts
+    const AGENT_A_PROMPT =
+    "You are Agent A, a podcast host. Speak briefly and ask follow-up questions.";
+    
+    const AGENT_B_PROMPT =
+    "You are Agent B, a podcast co-host. Respond naturally to Agent A.";
+    //prompts
+
+    //test 
+    const [topic, setTopic] = useState("")
+    const startPodcastFromInput = () => {
+      if (!topic.trim()) return
+      if (aiInProgressRef.current) return 
+      setAiAReply("")
+      setAiBReply("")
+      runPodcast(topic)
+    }
 
 
+    const [aiAReply, setAiAReply] = useState("")
+    const [aiBReply, setAiBReply] = useState("")
 
+    //tesst
+    
+    
+    
     //ws  logic 
     const wsRef = useRef<WebSocket | null>(null)
-
+    
     useEffect(()=>{
       const ws = new WebSocket("ws://localhost:3001")
       ws.onopen=()=>{
@@ -40,23 +62,23 @@
         const msg = JSON.parse(e.data)
         console.log("WS:",msg)
       }
-
+      
       ws.onerror=(e)=>{
         console.error("error on frontend")
       }
-
+      
       ws.onclose = (e) =>{
         console.log("closed")
       }
-
+      
       wsRef.current = ws
-
+      
       return ()=>{
         ws.close()
       }
-
+      
     },[])
-
+    
     const interrupt = () => {
       wsRef.current?.send(
         JSON.stringify({
@@ -64,12 +86,41 @@
         })
       )
     }
-
-
+    
+    
     //ws logic
-    const sendAi = async(text:string) => {
+    
+    
+    //podcast
+    const runPodcast = async (startText : string) => {
+      let lastText = startText
+      while(true){
+        const aReply = await sendAi(
+          `${AGENT_A_PROMPT}\n\nTopic: ${lastText}`,
+          setAiAReply
+        )
+        if(!aReply || abortControllerRef.current?.signal.aborted) break
+        
+        const bReply = await sendAi(
+          `${AGENT_B_PROMPT}\n\n${aReply}`,
+          setAiBReply
+
+        )
+        if(!bReply || abortControllerRef.current?.signal.aborted) break
+
+        lastText = bReply
+      }
+    }
+    
+
+
+    //podcast
+    
+    
+    
+    const sendAi = async(text:string ,setReply: React.Dispatch<React.SetStateAction<string>>): Promise<string | undefined> => {
+      let assistantReply = "" 
       aiInProgressRef.current = true;
-      setAiReply("")
       abortControllerRef.current = new AbortController()
       const currentGeneration = ++generationRef.current;
 
@@ -85,61 +136,62 @@
       let jsonBuffer = ""
       let aborted = false
       try {
-  while (true) {
-    const { value, done } = await reader.read();
-    if (done) break;
+      while (true) {
+        const { value, done } = await reader.read();
+        if (done) break;
 
-    const chunk = decoder.decode(value);
-    jsonBuffer += chunk;
+        const chunk = decoder.decode(value);
+        jsonBuffer += chunk;
 
-    const lines = jsonBuffer.split("\n");
-    jsonBuffer = lines.pop() || "";
+        const lines = jsonBuffer.split("\n");
+        jsonBuffer = lines.pop() || "";
 
-    lines.forEach((line) => {
-      if (!line.trim()) return;
+        lines.forEach((line) => {
+          if (!line.trim()) return;
 
-      if (generationRef.current !== currentGeneration) {
-        aborted = true;
+          if (generationRef.current !== currentGeneration) {
+            aborted = true;
+            return;
+          }
+
+          const json = JSON.parse(line);
+          if (!json.response) return;
+
+          if (abortControllerRef.current?.signal.aborted) {
+            aborted = true
+            return 
+          };
+
+          assistantReply += json.response;
+
+          setReply((prev) => prev + json.response);
+          sentenceBuffer += json.response;
+
+          const sentences = sentenceBuffer.match(/[^.!?]+[.!?]+/g);
+          if (sentences) {
+            sentences.forEach((s) =>
+              sentenceQueueRef.current.push(s.trim())
+            );
+
+            sentenceBuffer = sentenceBuffer.replace(sentences.join(""), "");
+
+            if (!isSpeakingRef.current) {
+              speakNext();
+            }
+          }
+        });
+        if(aborted) break
+      }
+      } catch (err: any) {
+      if (err.name === "AbortError") {
+        console.log("AI stream aborted");
         return;
       }
-
-      const json = JSON.parse(line);
-      if (!json.response) return;
-
-      // ❌ STOP if aborted
-      if (abortControllerRef.current?.signal.aborted) {
-        aborted = true
-        return 
-      };
-
-      setAiReply((prev) => prev + json.response);
-      sentenceBuffer += json.response;
-
-      const sentences = sentenceBuffer.match(/[^.!?]+[.!?]+/g);
-      if (sentences) {
-        sentences.forEach((s) =>
-          sentenceQueueRef.current.push(s.trim())
-        );
-
-        sentenceBuffer = sentenceBuffer.replace(sentences.join(""), "");
-
-        if (!isSpeakingRef.current) {
-          speakNext();
-        }
+        throw err;
+      }finally{
+        aiInProgressRef.current = false
+        return assistantReply
       }
-    });
-    if(aborted) break
-  }
-} catch (err: any) {
-  if (err.name === "AbortError") {
-    console.log("AI stream aborted");
-    return;
-  }
-  throw err;
-}finally{
-  aiInProgressRef.current = false
-}
-
 
     }
 
@@ -182,7 +234,7 @@
       recognition.onresult = (e : any) => {
         const text = e.results[0][0].transcript
         setTranscript(text)
-        sendAi(text)
+        // sendAi(text)
         console.log("TRANs : ",text)
       }
 
@@ -294,16 +346,35 @@
             onTouchStart={startRecording}
             onTouchEnd={stopRecording}
           >record</button>
-          <button className="bg-slate-600 h-40 w-40" onClick={playRecording}>play</button>
-          <button className="bg-slate-600 h-40 w-40" onClick={()=>speak(" hello yuvraj")}>test</button>
           <button className="bg-slate-600 h-40 w-40" onClick={interrupt}>interrupt</button>
         </div>
         <p className="flex items-center justify-center ">
           {transcript || "speak"}
         </p>
-        <p className="mt-4 text-blue-500">
-          {aiReply || "AI thinking..."}
-        </p>
+        <div className="mt-4 space-y-4">
+          <p className="text-blue-500">
+            <strong>Agent A:</strong> {aiAReply || "thinking..."}
+          </p>
+
+          <p className="text-green-500">
+            <strong>Agent B:</strong> {aiBReply || "thinking..."}
+          </p>
+        </div>
+
+
+        <input
+          className="border p-2 w-full"
+          placeholder="Enter podcast topic"
+          value={topic}
+          onChange={(e) => setTopic(e.target.value)}
+          />
+
+        <button
+          className="bg-green-500 h-12 w-full mt-2"
+          onClick={startPodcastFromInput}
+        >
+          start podcast
+        </button>
       </div>
     );
   }
