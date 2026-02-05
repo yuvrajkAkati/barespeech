@@ -1,5 +1,4 @@
   "use client"
-
   import { useEffect, useRef, useState } from "react"
 
   export default function Home() {
@@ -18,6 +17,13 @@
     const sentenceQueueRef = useRef<string[]>([]);
     const isSpeakingRef = useRef(false);
     
+    
+    //podcast
+    const podcastPausedRef = useRef(false)
+    const lastPodcastTextRef = useRef<string | null>(null)
+    //podcast
+
+
     //prompts
     const AGENT_A_PROMPT =
     "You are Agent A, a podcast host. Speak briefly and ask follow-up questions.";
@@ -92,25 +98,34 @@
     
     
     //podcast
-    const runPodcast = async (startText : string) => {
-      let lastText = startText
-      while(true){
-        const aReply = await sendAi(
-          `${AGENT_A_PROMPT}\n\nTopic: ${lastText}`,
-          setAiAReply
-        )
-        if(!aReply || abortControllerRef.current?.signal.aborted) break
-        
-        const bReply = await sendAi(
-          `${AGENT_B_PROMPT}\n\n${aReply}`,
-          setAiBReply
+    const runPodcast = async (startText: string) => {
+  podcastPausedRef.current = false
+  lastPodcastTextRef.current = startText
 
-        )
-        if(!bReply || abortControllerRef.current?.signal.aborted) break
+  let lastText = startText
 
-        lastText = bReply
-      }
+  while (true) {
+    if (podcastPausedRef.current) return   // ✅ ADD THIS
+
+    const aReply = await sendAi(
+      `${AGENT_A_PROMPT}\n\nTopic: ${lastText}`,
+      setAiAReply
+    )
+    if (!aReply) return
+    if( podcastPausedRef.current) return
+
+    const bReply = await sendAi(
+      `${AGENT_B_PROMPT}\n\n${aReply}`,
+      setAiBReply
+    )
+    if (!bReply) return
+    if(podcastPausedRef.current) return
+
+    lastText = bReply
+    lastPodcastTextRef.current = lastText
+  }
     }
+
     
 
 
@@ -233,6 +248,7 @@
 
       recognition.onresult = (e : any) => {
         const text = e.results[0][0].transcript
+        transcriptRef.current = text
         setTranscript(text)
         // sendAi(text)
         console.log("TRANs : ",text)
@@ -246,10 +262,10 @@
     },[])
 
     const startRecording = async () => {
-      
-      if (aiInProgressRef.current) {
-        fetch("/api/reset", { method: "POST" });
-      }
+      podcastPausedRef.current = true
+      // if (aiInProgressRef.current) {
+      //   fetch("/api/reset", { method: "POST" });
+      // }
 
       abortControllerRef.current?.abort()
       abortControllerRef.current = null
@@ -299,6 +315,15 @@
       mediaRecorderRef.current.stop()
       recognitionRef.current?.stop()
       console.log("recording stopped")
+      setTimeout(async () => {
+        const userText = transcriptRef.current || transcript
+        if(!userText) return
+        await sendAi(`${AGENT_A_PROMPT}\n\nUser says: ${userText}`,setAiAReply)
+        if(lastPodcastTextRef.current){
+          podcastPausedRef.current = false
+          runPodcast(lastPodcastTextRef.current)
+        }
+      }, 300);
     }
 
     const playRecording = async() => {
