@@ -97,7 +97,7 @@ export class Session {
   private conversation : Message[] = [
     {
       role : "system",
-      content : "You are hosting an ai podcast.Stay concise and conversational"
+      content : "You are hosting a podcast.Stay concise and conversational"
     }
   ]
 

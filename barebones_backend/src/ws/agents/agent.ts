@@ -1,26 +1,21 @@
-import type { AgentInput,AgentOutputChunk } from "./types.js";
+import type { AgentInput, AgentOutputChunk } from "./types.js";
 
-type StreamFn = (chunk : AgentOutputChunk) => void
-type AbortSignalLike = {aborted : boolean}
+type StreamFn = (chunk: AgentOutputChunk) => void;
+type AbortSignalLike = { aborted: boolean };
 
 export async function runAgent(
-    input : AgentInput,
-    stream : StreamFn,
-    signal? : AbortSignalLike
-){
-    const { llm ,prompt,context} = input
-    
-    const response = await llm.stream({
-        messages : [
-            {role : "system" , content : prompt},
-            ...context,
-        ]
-    })
+  input: AgentInput,
+  stream: StreamFn,
+  signal?: AbortSignalLike
+) {
+  const { llm, messages } = input;
 
-    for await (const token of response){
-        if(signal?.aborted) return
-        stream({ type: "token",value : token})
-    }
+  const response = await llm.stream({ messages });
 
-    stream({type : "end"})
+  for await (const token of response) {
+    if (signal?.aborted) return;
+    stream({ type: "token", value: token });
+  }
+
+  stream({ type: "end" });
 }

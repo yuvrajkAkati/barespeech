@@ -7,14 +7,14 @@ export type Message = {
 }
 
 export type AgentInput = {
-    llm : {
-        stream : ( args : {
-            messages : { role : string; content : string}[]
-        }) => AsyncIterable<string>
-    }
-    prompt : string
-    context : Message[]
+  llm: {
+    stream: (args: {
+      messages: { role: string; content: string }[]
+    }) => AsyncIterable<string>
+  }
+  messages: { role: string; content: string }[]
 }
+
 
 export type AgentOutputChunk = 
 | {type : "token";value : string}
