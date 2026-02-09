@@ -13,6 +13,14 @@
     const abortControllerRef = useRef<AbortController | null>(null)
     const generationRef = useRef(0);
     const aiInProgressRef = useRef(false)
+
+
+    //voice lag
+    const VOICE_CHUNK_SIZE = 50
+    const MAX_VOICE_QUEUE = 2
+
+    //voice lag
+
     //optimization
     const sentenceQueueRef = useRef<string[]>([]);
     const isSpeakingRef = useRef(false);
@@ -182,13 +190,12 @@
           setReply((prev) => prev + json.response);
           sentenceBuffer += json.response;
 
-          const sentences = sentenceBuffer.match(/[^.!?]+[.!?]+/g);
-          if (sentences) {
-            sentences.forEach((s) =>
-              sentenceQueueRef.current.push(s.trim())
-            );
+          if (sentenceBuffer.length >= VOICE_CHUNK_SIZE) {
+            const splitIndex = sentenceBuffer.lastIndexOf(" ", VOICE_CHUNK_SIZE) || VOICE_CHUNK_SIZE
 
-            sentenceBuffer = sentenceBuffer.replace(sentences.join(""), "");
+            const chunk = sentenceBuffer.slice(0, splitIndex)
+            sentenceBuffer = sentenceBuffer.slice(splitIndex)
+            sentenceQueueRef.current.push(chunk)
 
             if (!isSpeakingRef.current) {
               speakNext();
@@ -205,6 +212,11 @@
         throw err;
       }finally{
         aiInProgressRef.current = false
+        if (sentenceBuffer.trim()) {
+          sentenceQueueRef.current.push(sentenceBuffer)
+          sentenceBuffer = ""
+          if (!isSpeakingRef.current) speakNext()
+        }
         return assistantReply
       }
 
@@ -218,7 +230,7 @@
       isSpeakingRef.current = true
       const utterance = new SpeechSynthesisUtterance(sentence)
       utterance.lang = "en-US"
-
+      utterance.rate = 1.25
       utterance.onend = () => {
         isSpeakingRef.current = false
         speakNext()
@@ -326,38 +338,38 @@
       }, 300);
     }
 
-    const playRecording = async() => {
-      if(!audioUrlRef.current) return
-      const audio = new Audio(audioUrlRef.current)
-      audio.play()
-    }
+    // const playRecording = async() => {
+    //   if(!audioUrlRef.current) return
+    //   const audio = new Audio(audioUrlRef.current)
+    //   audio.play()
+    // }
 
-    const speak = (text: string) => {
-      if (!text) return;
+    // const speak = (text: string) => {
+    //   if (!text) return;
 
-      window.speechSynthesis.cancel();
+    //   window.speechSynthesis.cancel();
 
-      const utterance = new SpeechSynthesisUtterance(text);
-      utterance.lang = "en-US";
+    //   const utterance = new SpeechSynthesisUtterance(text);
+    //   utterance.lang = "en-US";
 
-      utterance.onend = () => {
-        isSpeakingRef.current = false;
-      };
+    //   utterance.onend = () => {
+    //     isSpeakingRef.current = false;
+    //   };
 
-      utterance.onerror = () => {
-        isSpeakingRef.current = false;
-      };
+    //   utterance.onerror = () => {
+    //     isSpeakingRef.current = false;
+    //   };
 
-      window.speechSynthesis.speak(utterance);
-    };
+    //   window.speechSynthesis.speak(utterance);
+    // };
 
-    const speakSentence = (text: string) => {
-      if (!text.trim()) return;
-      window.speechSynthesis.cancel();
-      const utterance = new SpeechSynthesisUtterance(text);
-      utterance.lang = "en-US";
-      window.speechSynthesis.speak(utterance);
-    };
+    // const speakSentence = (text: string) => {
+    //   if (!text.trim()) return;
+    //   window.speechSynthesis.cancel();
+    //   const utterance = new SpeechSynthesisUtterance(text);
+    //   utterance.lang = "en-US";
+    //   window.speechSynthesis.speak(utterance);
+    // };
 
     
 

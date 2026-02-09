@@ -1,8 +1,9 @@
 import { TokenQueue } from "./tokenQueue.js";
 import type {WebSocket as WsWebSocket} from "ws";
-import type { WSOutgoing } from "./types.js";
+import type { Message } from "./agents/types.js";
 
 export class Session {
+
   socket: WsWebSocket;
   queue: TokenQueue;
   private controller?: AbortController | undefined;
@@ -29,27 +30,32 @@ export class Session {
     });
   }
 
-  interrupt() {
+  interrupt(){
     console.log("Session interrupted");
 
     this.controller?.abort();
     this.controller = undefined;
 
-    
     this.queue.stop();
+    this.rollbackUncommitted();
 
-    
     this.socket.send(JSON.stringify({ type: "audio_stop" }));
   }
 
 
-  async runOllama(prompt: string, signal: AbortSignal) {
+  async runOllama(signal: AbortSignal){
+    const messages = this.buildContext().map((m)=>({
+      role : 
+        m.role === "agentA" || m.role === "agentB" ? "assistant" : m.role,
+      content : m.content
+    }))
+
     const res = await fetch("http://localhost:11434/api/generate", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({
         model: "llama3",
-        prompt,
+        messages,
         stream: true,
       }),
       signal,
@@ -59,6 +65,7 @@ export class Session {
     const decoder = new TextDecoder();
 
     let buffer = "";
+    let assistantText = "";
 
     while (true) {
       const { value, done } = await reader.read();
@@ -74,10 +81,64 @@ export class Session {
 
         const json = JSON.parse(line);
         if (json.response) {
+          assistantText += json.response;
           this.queue.push(json.response);
         }
       }
     }
+
+    if (!signal.aborted && assistantText.trim()) {
+      this.addAgentMessage("agentA", assistantText);
+      this.commitLastUserMessage();
+    }
+  }
+
+
+  private conversation : Message[] = [
+    {
+      role : "system",
+      content : "You are hosting an ai podcast.Stay concise and conversational"
+    }
+  ]
+
+  addUserMessage(text : string){
+    this.conversation.push({
+      role : "user",
+      content : text,
+      committed : false
+    })
+  }
+
+  addAgentMessage(role : "agentA" | "agentB" , text : string){
+    this.conversation.push({
+      role,
+      content : text,
+      committed : true
+    })
+  }
+
+  commitLastUserMessage(){
+    for (let i = this.conversation.length - 1; i >= 0; i--) {
+      const msg = this.conversation[i] ;
+      if (msg && msg.role === "user" && msg.committed === false ) {
+        msg.committed = true;
+        return;
+      }
+    }
+  }
+
+
+  rollbackUncommitted(){
+    this.conversation = this.conversation.filter(
+      (msg) => msg.committed !== false
+    );
+  }
+
+
+  buildContext(maxMessages = 10): Message[]{
+    const system = this.conversation.find(m => m.role === "system");
+    const rest = this.conversation.filter(m => m.role !== "system").slice(-maxMessages);
+    return system ? [system, ...rest] : rest;
   }
 
 

@@ -1,8 +1,9 @@
-export type Role = "user" | "agentA" | "agentB"
+export type Role = "system" |"user" | "agentA" | "agentB"
 
 export type Message = {
     role : Role;
     content : string;
+    committed? : boolean;
 }
 
 export type AgentInput = {
