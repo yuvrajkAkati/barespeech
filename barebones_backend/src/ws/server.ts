@@ -68,9 +68,7 @@ export function startWebServer(port = 3001) {
   );
   if (!session) return;
 
-  session.startLLM((signal) =>
-    session.runOllama(msg.text, signal)
-  );
+  session.orchestrator.onUserMessage(msg.text);
 });
 
 

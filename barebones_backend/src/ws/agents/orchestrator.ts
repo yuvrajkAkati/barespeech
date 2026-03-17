@@ -1,46 +1,49 @@
-import { sign } from "node:crypto";
 import type { Session } from "../session.js";
 
-type Turn = "agentA" | "agentB"
+type Turn = "agentA" | "agentB";
 
 export class Orchestrator {
-    private session : Session;
-    private turn : Turn = "agentA"
-    private running = false
+  private session: Session;
+  private turn: Turn = "agentA";
+  private running = false;
 
-    constructor(session : Session){
-        this.session = session
+  constructor(session: Session) {
+    this.session = session;
+  }
+
+  onUserMessage(text: string) {
+    this.session.addUserMessage(text);
+
+    if (!this.running) {
+      this.running = true;
+      this.turn = "agentA";
+      this.nextTurn();
     }
+  }
 
-    onUserMessage(text : string){
-        this.session.addUserMessage(text)
+  private nextTurn() {
+    if (!this.running) return;
 
-        if(!this.running){
-            this.running = true
-            this.turn = "agentA"
-            this.nextTurn()
-        }
-    }
+    const role = this.turn;
 
-    private nextTurn(){
-        if(!this.running) return
-        const role = this.turn 
+    this.session.startLLM(async (signal) => {
+      // ✅ FIX: call correct function + pass role
+      await this.session.runLLM(role, signal);
 
-        this.session.startLLM(async(signal)=> {
-            await this.session.runOllama(signal)
-            
-            if(signal.aborted){
-                this.running = false
-                return
-            }
+      if (signal.aborted) {
+        this.running = false;
+        return;
+      }
 
-            this.turn = this.turn === "agentA" ? "agentB" : "agentA"
+      // ✅ switch turn
+      this.turn = this.turn === "agentA" ? "agentB" : "agentA";
 
-            this.nextTurn()
-        })
-    }
+      // ✅ continue loop
+      this.nextTurn();
+    });
+  }
 
-    stop(){
-        this.running = false
-    }
+  stop() {
+    this.running = false;
+  }
 }
