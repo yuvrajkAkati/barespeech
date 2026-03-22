@@ -14,8 +14,14 @@ export class Session {
     this.socket = socket;
 
     this.queue = new TokenQueue((tokens) => {
-      tokens.forEach((text) => {
-        this.socket.send(JSON.stringify({ type: "token", text }));
+      tokens.forEach(({ role, token }) => {
+        this.socket.send(
+          JSON.stringify({
+            type: "token",
+            role,
+            text: token,
+          })
+        );
       });
     });
 
@@ -76,7 +82,7 @@ export class Session {
 
     const fullText = await streamOllama(
       messages,
-      (token) => this.queue.push(token),
+      (token) => this.queue.push(role,token),
       signal
     );
 

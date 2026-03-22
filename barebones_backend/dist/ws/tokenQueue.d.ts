@@ -5,8 +5,11 @@ export declare class TokenQueue {
     private queue;
     private active;
     private interval?;
-    constructor(onTokens: (tokens: string[]) => void, intervalMs?: number, batchSize?: number);
-    push(token: string): void;
+    constructor(onTokens: (tokens: {
+        role: string;
+        token: string;
+    }[]) => void, intervalMs?: number, batchSize?: number);
+    push(role: string, token: string): void;
     start(): void;
     stop(): void;
     reset(): void;

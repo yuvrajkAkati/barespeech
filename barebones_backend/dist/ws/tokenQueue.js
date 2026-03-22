@@ -10,10 +10,10 @@ export class TokenQueue {
         this.intervalMs = intervalMs;
         this.batchSize = batchSize;
     }
-    push(token) {
+    push(role, token) {
         if (!this.active)
             return;
-        this.queue.push(token);
+        this.queue.push({ role, token });
     }
     start() {
         if (this.active)

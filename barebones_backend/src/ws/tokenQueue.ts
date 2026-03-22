@@ -1,17 +1,16 @@
 export class TokenQueue {
-  private queue: string[] = [];
-  private active = false;
+  private queue: { role: string; token: string }[] = [];  private active = false;
   private interval?: NodeJS.Timeout | undefined;
 
   constructor(
-    private onTokens: (tokens: string[]) => void,
+    private onTokens: (tokens: { role: string; token: string }[]) => void,
     private intervalMs = 30,
     private batchSize = 3
   ) {}
 
-  push(token: string) {
+  push(role: string,token: string) {
     if (!this.active) return;
-    this.queue.push(token);
+    this.queue.push({role,token});
   }
 
   start() {

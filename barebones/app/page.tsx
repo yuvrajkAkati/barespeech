@@ -9,7 +9,6 @@
     const recognitionRef = useRef<any>(null)
     const transcriptRef = useRef<string>("")
     const [transcript,setTranscript] = useState("")
-    const [aiReply,setAiReply] = useState("")
     const abortControllerRef = useRef<AbortController | null>(null)
     const generationRef = useRef(0);
     const aiInProgressRef = useRef(false)
@@ -47,7 +46,7 @@
       if (aiInProgressRef.current) return 
       setAiAReply("")
       setAiBReply("")
-      runPodcast(topic)
+      sendUserMessage(topic)
     }
 
 
@@ -72,9 +71,31 @@
         )
       }
       
-      ws.onmessage=(e)=>{
+      ws.onmessage = (e) => {
         const msg = JSON.parse(e.data)
-        console.log("WS:",msg)
+
+        if (msg.type === "token") {
+          // 🔥 route based on role
+          if (msg.role === "agentA") {
+            setAiAReply((prev) => prev + msg.text)
+          } else if (msg.role === "agentB") {
+            setAiBReply((prev) => prev + msg.text)
+          }
+
+          // 🔊 speech
+          const prefix =
+            msg.role === "agentA" ? "Host A: " : "Host B: "
+
+          sentenceQueueRef.current.push(prefix + msg.text)
+
+          if (!isSpeakingRef.current) speakNext()
+        }
+
+        if (msg.type === "audio_stop") {
+          window.speechSynthesis.cancel()
+          sentenceQueueRef.current = []
+          isSpeakingRef.current = false
+        }
       }
       
       ws.onerror=(e)=>{
@@ -105,34 +126,6 @@
     //ws logic
     
     
-    //podcast
-    const runPodcast = async (startText: string) => {
-  podcastPausedRef.current = false
-  lastPodcastTextRef.current = startText
-
-  let lastText = startText
-
-  while (true) {
-    if (podcastPausedRef.current) return   // ✅ ADD THIS
-
-    const aReply = await sendAi(
-      `${AGENT_A_PROMPT}\n\nTopic: ${lastText}`,
-      setAiAReply
-    )
-    if (!aReply) return
-    if( podcastPausedRef.current) return
-
-    const bReply = await sendAi(
-      `${AGENT_B_PROMPT}\n\n${aReply}`,
-      setAiBReply
-    )
-    if (!bReply) return
-    if(podcastPausedRef.current) return
-
-    lastText = bReply
-    lastPodcastTextRef.current = lastText
-  }
-    }
 
     
 
@@ -141,85 +134,16 @@
     
     
     
-    const sendAi = async(text:string ,setReply: React.Dispatch<React.SetStateAction<string>>): Promise<string | undefined> => {
-      let assistantReply = "" 
-      aiInProgressRef.current = true;
-      abortControllerRef.current = new AbortController()
-      const currentGeneration = ++generationRef.current;
+    const sendUserMessage = (text: string) => {
+      setAiAReply("")
+      setAiBReply("")
 
-      const res = await fetch("/api/ai",{
-        method : "POST",
-        headers : {"Content-Type" : "application/json"},
-        body : JSON.stringify({text}),
-        signal : abortControllerRef.current.signal
-      })
-      const reader = res.body!.getReader();
-      const decoder = new TextDecoder();
-      let sentenceBuffer = "";
-      let jsonBuffer = ""
-      let aborted = false
-      try {
-      while (true) {
-        const { value, done } = await reader.read();
-        if (done) break;
-
-        const chunk = decoder.decode(value);
-        jsonBuffer += chunk;
-
-        const lines = jsonBuffer.split("\n");
-        jsonBuffer = lines.pop() || "";
-
-        lines.forEach((line) => {
-          if (!line.trim()) return;
-
-          if (generationRef.current !== currentGeneration) {
-            aborted = true;
-            return;
-          }
-
-          const json = JSON.parse(line);
-          if (!json.response) return;
-
-          if (abortControllerRef.current?.signal.aborted) {
-            aborted = true
-            return 
-          };
-
-          assistantReply += json.response;
-
-          setReply((prev) => prev + json.response);
-          sentenceBuffer += json.response;
-
-          if (sentenceBuffer.length >= VOICE_CHUNK_SIZE) {
-            const splitIndex = sentenceBuffer.lastIndexOf(" ", VOICE_CHUNK_SIZE) || VOICE_CHUNK_SIZE
-
-            const chunk = sentenceBuffer.slice(0, splitIndex)
-            sentenceBuffer = sentenceBuffer.slice(splitIndex)
-            sentenceQueueRef.current.push(chunk)
-
-            if (!isSpeakingRef.current) {
-              speakNext();
-            }
-          }
-        });
-        if(aborted) break
-      }
-      } catch (err: any) {
-      if (err.name === "AbortError") {
-        console.log("AI stream aborted");
-        return;
-      }
-        throw err;
-      }finally{
-        aiInProgressRef.current = false
-        if (sentenceBuffer.trim()) {
-          sentenceQueueRef.current.push(sentenceBuffer)
-          sentenceBuffer = ""
-          if (!isSpeakingRef.current) speakNext()
-        }
-        return assistantReply
-      }
-
+      wsRef.current?.send(
+        JSON.stringify({
+          type: "user_message",
+          text,
+        })
+      )
     }
 
 
@@ -274,6 +198,11 @@
     },[])
 
     const startRecording = async () => {
+      wsRef.current?.send(
+          JSON.stringify({
+          type: "interrupt"
+        })  
+      )
       podcastPausedRef.current = true
       // if (aiInProgressRef.current) {
       //   fetch("/api/reset", { method: "POST" });
@@ -330,11 +259,7 @@
       setTimeout(async () => {
         const userText = transcriptRef.current || transcript
         if(!userText) return
-        await sendAi(`${AGENT_A_PROMPT}\n\nUser says: ${userText}`,setAiAReply)
-        if(lastPodcastTextRef.current){
-          podcastPausedRef.current = false
-          runPodcast(lastPodcastTextRef.current)
-        }
+        sendUserMessage(userText)
       }, 300);
     }
 

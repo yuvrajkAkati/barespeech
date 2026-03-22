@@ -9,8 +9,12 @@ export class Session {
     constructor(socket) {
         this.socket = socket;
         this.queue = new TokenQueue((tokens) => {
-            tokens.forEach((text) => {
-                this.socket.send(JSON.stringify({ type: "token", text }));
+            tokens.forEach(({ role, token }) => {
+                this.socket.send(JSON.stringify({
+                    type: "token",
+                    role,
+                    text: token,
+                }));
             });
         });
         this.queue.start();
@@ -53,7 +57,7 @@ export class Session {
                 ? "You are Host A of a podcast. Lead the conversation, ask questions, keep it engaging."
                 : "You are Host B. React naturally, challenge ideas, add insights and humor.",
         });
-        const fullText = await streamOllama(messages, (token) => this.queue.push(token), signal);
+        const fullText = await streamOllama(messages, (token) => this.queue.push(role, token), signal);
         if (!signal.aborted && fullText.trim()) {
             this.addAgentMessage(role, fullText);
             this.commitLastUserMessage();
