@@ -10,12 +10,15 @@ export async function streamOllama(
   onToken: StreamHandler,
   signal: AbortSignal
 ): Promise<string> {
+  console.log("stream ollama function called inside ollama.ts")
   const res = await fetch("http://localhost:11434/api/generate", {
     method: "POST",
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify({
-      model: "llama3",
-      messages,
+  model: "llama3",
+  prompt: messages
+      .map((m) => `${m.role}: ${m.content}`)
+      .join("\n"),
       stream: true,
     }),
     signal,
@@ -40,6 +43,8 @@ export async function streamOllama(
       if (!line.trim()) continue;
 
       const json = JSON.parse(line);
+
+      console.log("OLLAMA CHUNK:", json); 
       if (json.response) {
         fullText += json.response;
         onToken(json.response);

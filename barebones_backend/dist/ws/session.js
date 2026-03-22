@@ -1,8 +1,11 @@
 import { TokenQueue } from "./tokenQueue.js";
+import { streamOllama } from "./ollama.js";
+import { Orchestrator } from "./agents/orchestrator.js";
 export class Session {
     socket;
     queue;
     controller;
+    orchestrator;
     constructor(socket) {
         this.socket = socket;
         this.queue = new TokenQueue((tokens) => {
@@ -11,11 +14,14 @@ export class Session {
             });
         });
         this.queue.start();
+        // ✅ FIX 1: initialize orchestrator
+        this.orchestrator = new Orchestrator(this);
     }
     startLLM(streamFn) {
         this.controller = new AbortController();
+        // ✅ FIX 2: ensure queue always active
+        this.queue.reset();
         streamFn(this.controller.signal).catch((err) => {
-            // 🔑 THIS IS THE FIX
             if (err.name === "AbortError") {
                 console.log("LLM generation aborted cleanly");
                 return;
@@ -25,44 +31,72 @@ export class Session {
     }
     interrupt() {
         console.log("Session interrupted");
-        // stop generation
         this.controller?.abort();
         this.controller = undefined;
-        // stop tokens
-        this.queue.stop();
-        // tell client to stop audio
+        this.queue.stop(); // fine because reset() will restart it later
+        this.rollbackUncommitted();
         this.socket.send(JSON.stringify({ type: "audio_stop" }));
+        this.orchestrator.stop();
     }
-    async runOllama(prompt, signal) {
-        const res = await fetch("http://localhost:11434/api/generate", {
-            method: "POST",
-            headers: { "Content-Type": "application/json" },
-            body: JSON.stringify({
-                model: "llama3",
-                prompt,
-                stream: true,
-            }),
-            signal,
+    async runLLM(role, signal) {
+        console.log("llm is running");
+        const messages = this.buildContext().map((m) => ({
+            role: m.role === "agentA" || m.role === "agentB"
+                ? "assistant"
+                : m.role,
+            content: m.content,
+        }));
+        // ✅ FIX 3: role-based behavior (VERY IMPORTANT)
+        messages.unshift({
+            role: "system",
+            content: role === "agentA"
+                ? "You are Host A of a podcast. Lead the conversation, ask questions, keep it engaging."
+                : "You are Host B. React naturally, challenge ideas, add insights and humor.",
         });
-        const reader = res.body.getReader();
-        const decoder = new TextDecoder();
-        let buffer = "";
-        while (true) {
-            const { value, done } = await reader.read();
-            if (done || signal.aborted)
-                break;
-            buffer += decoder.decode(value, { stream: true });
-            const lines = buffer.split("\n");
-            buffer = lines.pop() || "";
-            for (const line of lines) {
-                if (!line.trim())
-                    continue;
-                const json = JSON.parse(line);
-                if (json.response) {
-                    this.queue.push(json.response);
-                }
+        const fullText = await streamOllama(messages, (token) => this.queue.push(token), signal);
+        if (!signal.aborted && fullText.trim()) {
+            this.addAgentMessage(role, fullText);
+            this.commitLastUserMessage();
+        }
+    }
+    conversation = [
+        {
+            role: "system",
+            content: "You are hosting a podcast. Stay concise and conversational.",
+        },
+    ];
+    addUserMessage(text) {
+        this.conversation.push({
+            role: "user",
+            content: text,
+            committed: false,
+        });
+    }
+    addAgentMessage(role, text) {
+        this.conversation.push({
+            role,
+            content: text,
+            committed: true,
+        });
+    }
+    commitLastUserMessage() {
+        for (let i = this.conversation.length - 1; i >= 0; i--) {
+            const msg = this.conversation[i];
+            if (msg && msg.role === "user" && msg.committed === false) {
+                msg.committed = true;
+                return;
             }
         }
+    }
+    rollbackUncommitted() {
+        this.conversation = this.conversation.filter((msg) => msg.committed !== false);
+    }
+    buildContext(maxMessages = 10) {
+        const system = this.conversation.find((m) => m.role === "system");
+        const rest = this.conversation
+            .filter((m) => m.role !== "system")
+            .slice(-maxMessages);
+        return system ? [system, ...rest] : rest;
     }
 }
 //# sourceMappingURL=session.js.map

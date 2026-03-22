@@ -51,9 +51,12 @@ export class Session {
     this.rollbackUncommitted();
 
     this.socket.send(JSON.stringify({ type: "audio_stop" }));
+
+    this.orchestrator.stop()
   }
 
   async runLLM(role: "agentA" | "agentB", signal: AbortSignal) {
+    console.log("llm is running")
     const messages = this.buildContext().map((m) => ({
       role:
         m.role === "agentA" || m.role === "agentB"

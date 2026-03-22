@@ -12,6 +12,8 @@ export class Orchestrator {
   }
 
   onUserMessage(text: string) {
+    console.log("orchestrator has reveived the message")
+    this.session.interrupt();
     this.session.addUserMessage(text);
 
     if (!this.running) {
@@ -22,6 +24,7 @@ export class Orchestrator {
   }
 
   private nextTurn() {
+    console.log("next turn working")
     if (!this.running) return;
 
     const role = this.turn;
