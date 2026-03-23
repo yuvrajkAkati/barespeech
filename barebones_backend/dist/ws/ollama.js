@@ -9,6 +9,9 @@ export async function streamOllama(messages, onToken, signal) {
                 .map((m) => `${m.role}: ${m.content}`)
                 .join("\n"),
             stream: true,
+            options: {
+                num_predict: 80
+            }
         }),
         signal,
     });

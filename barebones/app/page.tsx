@@ -10,13 +10,9 @@
     const transcriptRef = useRef<string>("")
     const [transcript,setTranscript] = useState("")
     const abortControllerRef = useRef<AbortController | null>(null)
-    const generationRef = useRef(0);
     const aiInProgressRef = useRef(false)
 
 
-    //voice lag
-    const VOICE_CHUNK_SIZE = 50
-    const MAX_VOICE_QUEUE = 2
 
     //voice lag
 
@@ -27,18 +23,6 @@
     
     //podcast
     const podcastPausedRef = useRef(false)
-    const lastPodcastTextRef = useRef<string | null>(null)
-    //podcast
-
-
-    //prompts
-    const AGENT_A_PROMPT =
-    "You are Agent A, a podcast host. Speak briefly and ask follow-up questions.";
-    
-    const AGENT_B_PROMPT =
-    "You are Agent B, a podcast co-host. Respond naturally to Agent A.";
-    //prompts
-
     //test 
     const [topic, setTopic] = useState("")
     const startPodcastFromInput = () => {

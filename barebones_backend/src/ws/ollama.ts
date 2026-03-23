@@ -15,14 +15,17 @@ export async function streamOllama(
     method: "POST",
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify({
-  model: "llama3",
-  prompt: messages
-      .map((m) => `${m.role}: ${m.content}`)
-      .join("\n"),
+      model: "llama3",
+      prompt: messages
+          .map((m) => `${m.role}: ${m.content}`)
+          .join("\n"),
       stream: true,
-    }),
-    signal,
-  });
+      options : {
+        num_predict : 80
+      }
+      }),
+        signal,
+    });
 
   const reader = res.body!.getReader();
   const decoder = new TextDecoder();

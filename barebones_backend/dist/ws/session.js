@@ -1,6 +1,7 @@
 import { TokenQueue } from "./tokenQueue.js";
 import { streamOllama } from "./ollama.js";
 import { Orchestrator } from "./agents/orchestrator.js";
+import { getAgentSystemPrompt } from "./agents/agentPrompt.js";
 export class Session {
     socket;
     queue;
@@ -53,9 +54,7 @@ export class Session {
         // ✅ FIX 3: role-based behavior (VERY IMPORTANT)
         messages.unshift({
             role: "system",
-            content: role === "agentA"
-                ? "You are Host A of a podcast. Lead the conversation, ask questions, keep it engaging."
-                : "You are Host B. React naturally, challenge ideas, add insights and humor.",
+            content: getAgentSystemPrompt(role),
         });
         const fullText = await streamOllama(messages, (token) => this.queue.push(role, token), signal);
         if (!signal.aborted && fullText.trim()) {
