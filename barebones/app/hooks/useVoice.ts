@@ -9,11 +9,11 @@ export const useVoice = (onFinalTranscript: (text: string) => void) => {
   const transcriptRef = useRef<string>("")
   const [transcript, setTranscript] = useState("")
 
-  // 🔊 speech queue
+
   const sentenceQueueRef = useRef<string[]>([])
   const isSpeakingRef = useRef(false)
 
-  // 🎙️ INIT SPEECH RECOGNITION
+
   useEffect(() => {
     const SpeechRecognition =
       (window as any).SpeechRecognition ||
@@ -35,7 +35,7 @@ export const useVoice = (onFinalTranscript: (text: string) => void) => {
     recognitionRef.current = recognition
   }, [])
 
-  // 🎤 START RECORDING
+
   const startRecording = async () => {
     stopSpeaking()
 
@@ -60,7 +60,7 @@ export const useVoice = (onFinalTranscript: (text: string) => void) => {
     }
   }
 
-  // 🛑 STOP RECORDING
+
   const stopRecording = () => {
     if (!mediaRecorderRef.current || !isRecordingRef.current) return
 
@@ -75,13 +75,23 @@ export const useVoice = (onFinalTranscript: (text: string) => void) => {
     }, 300)
   }
 
-  // 🔊 SPEECH (QUEUE SYSTEM)
-  const speak = (text: string, role: "agentA" | "agentB") => {
-    const prefix = role === "agentA" ? "Host A: " : "Host B: "
-    sentenceQueueRef.current.push(prefix + text)
 
-    if (!isSpeakingRef.current) speakNext()
-  }
+const speak = (
+  text: string,
+  role: "agentA" | "agentB"
+): Promise<void> => {
+  return new Promise((resolve) => {
+    const utterance = new SpeechSynthesisUtterance(text)
+
+    utterance.lang = "en-US"
+    utterance.rate = role === "agentA" ? 1.05 : 1.1
+
+    utterance.onend = () => resolve()
+    utterance.onerror = () => resolve()
+
+    window.speechSynthesis.speak(utterance)
+  })
+}
 
   const speakNext = () => {
     if (sentenceQueueRef.current.length === 0) return
@@ -108,7 +118,7 @@ export const useVoice = (onFinalTranscript: (text: string) => void) => {
     window.speechSynthesis.speak(utterance)
   }
 
-  // 🛑 STOP SPEAKING (interrupt safe)
+
   const stopSpeaking = () => {
     window.speechSynthesis.cancel()
     sentenceQueueRef.current = []

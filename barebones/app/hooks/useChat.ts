@@ -1,12 +1,15 @@
 import { useEffect, useRef, useState } from "react"
-import { Message } from "../types/chat"
+import { Message,Role } from "../types/chat"
 import { useVoice } from "./useVoice"
 
 export const useChat = () => {
   const [messages, setMessages] = useState<Message[]>([])
-  const wsRef = useRef<WebSocket | null>(null)
 
-  // 🎙 voice integration
+  const wsRef = useRef<WebSocket | null>(null)
+  const sentenceBufferRef = useRef("")
+  const sentenceQueueRef = useRef<{ text: string; role: Role }[]>([])
+  const isProcessingRef = useRef(false)
+
   const { speak, stopSpeaking } = useVoice((text) => {
     sendMessage(text)
   })
@@ -22,14 +25,30 @@ export const useChat = () => {
       const msg = JSON.parse(e.data)
 
       if (msg.type === "token") {
-        handleToken(msg)
+        sentenceBufferRef.current += msg.text
 
-        // 🔊 speak alongside streaming
-        speak(msg.text, msg.role)
+        if (
+          msg.text.includes(".") ||
+          msg.text.includes("?") ||
+          msg.text.includes("!")
+        ) {
+          const sentence = sentenceBufferRef.current
+          sentenceBufferRef.current = ""
+
+          sentenceQueueRef.current.push({
+            text: sentence,
+            role: msg.role,
+          })
+
+          processQueue()
+        }
       }
 
       if (msg.type === "audio_stop") {
         stopSpeaking()
+        sentenceQueueRef.current = []
+        sentenceBufferRef.current = ""
+        isProcessingRef.current = false
       }
     }
 
@@ -47,30 +66,6 @@ export const useChat = () => {
       ws.close()
     }
   }, [])
-
-  const handleToken = (msg: any) => {
-    setMessages((prev) => {
-      const last = prev[prev.length - 1]
-
-      // ✅ append to same speaker
-      if (last && last.role === msg.role) {
-        return [
-          ...prev.slice(0, -1),
-          { ...last, content: last.content + msg.text },
-        ]
-      }
-
-      // ✅ new message block
-      return [
-        ...prev,
-        {
-          id: Date.now().toString(),
-          role: msg.role,
-          content: msg.text,
-        },
-      ]
-    })
-  }
 
   const sendMessage = (text: string) => {
     if (!text.trim()) return
@@ -99,8 +94,59 @@ export const useChat = () => {
       })
     )
 
-    // 🔥 VERY IMPORTANT
     stopSpeaking()
+    sentenceQueueRef.current = []
+    sentenceBufferRef.current = ""
+    isProcessingRef.current = false
+  }
+
+  const processQueue = async () => {
+    if (isProcessingRef.current) return
+    isProcessingRef.current = true
+
+    while (sentenceQueueRef.current.length > 0) {
+      const { text, role } = sentenceQueueRef.current.shift()!
+
+      await Promise.all([
+        speakSentence(text, role),
+        revealText(text, role),
+      ])
+    }
+
+    isProcessingRef.current = false
+  }
+
+  const speakSentence = async (text: string, role: Role) => {
+    if (role === "agentA" || role === "agentB") {
+      await speak(text, role)
+    }
+  }
+
+  const revealText = async (text: string, role: Role) => {
+    setMessages((prev) => [
+      ...prev,
+      {
+        id: Date.now().toString(),
+        role,
+        content: "",
+      },
+    ])
+
+    for (let i = 0; i < text.length; i++) {
+      await new Promise((r) => setTimeout(r, 15))
+
+      setMessages((prev) => {
+        const last = prev[prev.length - 1]
+        if (!last) return prev
+
+        const updated = {
+          ...last,
+          content: last.content + text[i],
+        }
+
+        return [...prev.slice(0, -1), updated]
+      })
+    }
   }
 
   return {
