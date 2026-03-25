@@ -3,18 +3,25 @@ import { useState } from "react"
 export const RecorderControls = ({
   startRecording,
   stopRecording,
+  interrupt,
 }: {
   startRecording: () => void
   stopRecording: () => void
+  interrupt: () => void
 }) => {
   const [isRecording, setIsRecording] = useState(false)
 
   const handleStart = () => {
+    if (isRecording) return
+
+    interrupt() // 🛑 stop speech + text instantly
     setIsRecording(true)
     startRecording()
   }
 
   const handleStop = () => {
+    if (!isRecording) return
+
     setIsRecording(false)
     stopRecording()
   }
@@ -28,11 +35,10 @@ export const RecorderControls = ({
             ? "bg-red-500 scale-110"
             : "bg-gray-600 hover:bg-gray-500"
         }`}
-        onMouseDown={handleStart}
-        onMouseUp={handleStop}
-        onMouseLeave={handleStop}
-        onTouchStart={handleStart}
-        onTouchEnd={handleStop}
+        onPointerDown={handleStart}
+        onPointerUp={handleStop}
+        onPointerCancel={handleStop}
+        onPointerLeave={handleStop}
       >
         🎙
       </button>

@@ -76,22 +76,22 @@ export const useVoice = (onFinalTranscript: (text: string) => void) => {
   }
 
 
-const speak = (
-  text: string,
-  role: "agentA" | "agentB"
-): Promise<void> => {
-  return new Promise((resolve) => {
-    const utterance = new SpeechSynthesisUtterance(text)
+  const speak = (
+    text: string,
+    role: "agentA" | "agentB"
+  ): Promise<void> => {
+    return new Promise((resolve) => {
+      const utterance = new SpeechSynthesisUtterance(text)
 
-    utterance.lang = "en-US"
-    utterance.rate = role === "agentA" ? 1.05 : 1.1
+      utterance.lang = "en-US"
+      utterance.rate = role === "agentA" ? 1.05 : 1.1
 
-    utterance.onend = () => resolve()
-    utterance.onerror = () => resolve()
+      utterance.onend = () => resolve()
+      utterance.onerror = () => resolve()
 
-    window.speechSynthesis.speak(utterance)
-  })
-}
+      window.speechSynthesis.speak(utterance)
+    })
+  }
 
   const speakNext = () => {
     if (sentenceQueueRef.current.length === 0) return

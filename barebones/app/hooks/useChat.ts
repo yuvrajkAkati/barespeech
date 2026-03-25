@@ -6,6 +6,7 @@ export const useChat = () => {
   const [messages, setMessages] = useState<Message[]>([])
 
   const wsRef = useRef<WebSocket | null>(null)
+  const cancelRef = useRef(false)
   const sentenceBufferRef = useRef("")
   const sentenceQueueRef = useRef<{ text: string; role: Role }[]>([])
   const isProcessingRef = useRef(false)
@@ -88,6 +89,9 @@ export const useChat = () => {
   }
 
   const interrupt = () => {
+
+    cancelRef.current = true
+
     wsRef.current?.send(
       JSON.stringify({
         type: "interrupt",
@@ -102,6 +106,7 @@ export const useChat = () => {
 
   const processQueue = async () => {
     if (isProcessingRef.current) return
+    cancelRef.current = false
     isProcessingRef.current = true
 
     while (sentenceQueueRef.current.length > 0) {
@@ -133,8 +138,12 @@ export const useChat = () => {
     ])
 
     for (let i = 0; i < text.length; i++) {
-      await new Promise((r) => setTimeout(r, 15))
+      if (cancelRef.current) return
 
+      await new Promise((r) => setTimeout(r, 50))
+      
+      if (cancelRef.current) return
+      
       setMessages((prev) => {
         const last = prev[prev.length - 1]
         if (!last) return prev
