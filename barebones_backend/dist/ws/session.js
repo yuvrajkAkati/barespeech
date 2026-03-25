@@ -19,12 +19,10 @@ export class Session {
             });
         });
         this.queue.start();
-        // ✅ FIX 1: initialize orchestrator
         this.orchestrator = new Orchestrator(this);
     }
     startLLM(streamFn) {
         this.controller = new AbortController();
-        // ✅ FIX 2: ensure queue always active
         this.queue.reset();
         streamFn(this.controller.signal).catch((err) => {
             if (err.name === "AbortError") {
@@ -38,7 +36,7 @@ export class Session {
         console.log("Session interrupted");
         this.controller?.abort();
         this.controller = undefined;
-        this.queue.stop(); // fine because reset() will restart it later
+        this.queue.stop();
         this.rollbackUncommitted();
         this.socket.send(JSON.stringify({ type: "audio_stop" }));
         this.orchestrator.stop();
@@ -51,7 +49,6 @@ export class Session {
                 : m.role,
             content: m.content,
         }));
-        // ✅ FIX 3: role-based behavior (VERY IMPORTANT)
         messages.unshift({
             role: "system",
             content: getAgentSystemPrompt(role),

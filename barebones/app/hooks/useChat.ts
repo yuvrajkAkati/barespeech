@@ -1,9 +1,22 @@
 import { useEffect, useRef, useState } from "react"
 import { Message,Role } from "../types/chat"
 import { useVoice } from "./useVoice"
+import { useMutation } from "convex/react"
+import { api } from "../../convex/_generated/api"
+import { Id } from "@/convex/_generated/dataModel"
+
+
+
 
 export const useChat = () => {
   const [messages, setMessages] = useState<Message[]>([])
+
+
+  const sendToDB = useMutation(api.messages.sendMessage)
+  const [conversationId, setConversationId] = useState<Id<"conversations">>()
+
+
+
 
   const wsRef = useRef<WebSocket | null>(null)
   const cancelRef = useRef(false)
@@ -14,6 +27,12 @@ export const useChat = () => {
   const { speak, stopSpeaking } = useVoice((text) => {
     sendMessage(text)
   })
+
+
+
+
+
+
 
   useEffect(() => {
     const ws = new WebSocket("ws://localhost:3001")
@@ -68,7 +87,7 @@ export const useChat = () => {
     }
   }, [])
 
-  const sendMessage = (text: string) => {
+  const sendMessage = async (text: string) => {
     if (!text.trim()) return
 
     wsRef.current?.send(
@@ -86,6 +105,8 @@ export const useChat = () => {
         content: text,
       },
     ])
+
+    
   }
 
   const interrupt = () => {
@@ -156,6 +177,9 @@ export const useChat = () => {
         return [...prev.slice(0, -1), updated]
       })
     }
+
+
+    
   }
 
   return {
