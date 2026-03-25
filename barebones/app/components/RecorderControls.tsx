@@ -14,7 +14,7 @@ export const RecorderControls = ({
   const handleStart = () => {
     if (isRecording) return
 
-    interrupt() // 🛑 stop speech + text instantly
+    interrupt() 
     setIsRecording(true)
     startRecording()
   }
@@ -28,7 +28,7 @@ export const RecorderControls = ({
 
   return (
     <div className="flex items-center gap-3">
-      {/* 🎙 Mic Button */}
+
       <button
         className={`h-14 w-14 rounded-full flex items-center justify-center text-white transition-all duration-200 ${
           isRecording
@@ -43,7 +43,7 @@ export const RecorderControls = ({
         🎙
       </button>
 
-      {/* 🔴 Recording Indicator */}
+      
       {isRecording && (
         <div className="flex items-center gap-2 text-red-400 text-sm">
           <span className="h-2 w-2 bg-red-500 rounded-full animate-pulse"></span>

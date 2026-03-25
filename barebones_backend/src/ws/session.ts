@@ -28,14 +28,14 @@ export class Session {
 
     this.queue.start();
 
-    // ✅ FIX 1: initialize orchestrator
+
     this.orchestrator = new Orchestrator(this);
   }
 
   startLLM(streamFn: (signal: AbortSignal) => Promise<void>) {
     this.controller = new AbortController();
 
-    // ✅ FIX 2: ensure queue always active
+
     this.queue.reset();
 
     streamFn(this.controller.signal).catch((err) => {
@@ -53,7 +53,7 @@ export class Session {
     this.controller?.abort();
     this.controller = undefined;
 
-    this.queue.stop(); // fine because reset() will restart it later
+    this.queue.stop(); 
 
     this.rollbackUncommitted();
 
@@ -72,7 +72,7 @@ export class Session {
       content: m.content,
     }));
 
-    // ✅ FIX 3: role-based behavior (VERY IMPORTANT)
+
     messages.unshift({
       role: "system",
       content: getAgentSystemPrompt(role),

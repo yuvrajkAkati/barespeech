@@ -30,7 +30,6 @@ export class Orchestrator {
     const role = this.turn;
 
     this.session.startLLM(async (signal) => {
-      // ✅ FIX: call correct function + pass role
       await this.session.runLLM(role, signal);
 
       if (signal.aborted) {
@@ -38,10 +37,8 @@ export class Orchestrator {
         return;
       }
 
-      // ✅ switch turn
       this.turn = this.turn === "agentA" ? "agentB" : "agentA";
 
-      // ✅ continue loop
       this.nextTurn();
     });
   }

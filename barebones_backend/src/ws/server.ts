@@ -50,7 +50,7 @@ export function startWebServer(port = 3001) {
 });
   });
 
-  // EVENTS 
+  
 
   bus.on("hello", ({ socket, msg }) => {
   if (msg.type !== "hello") return;
@@ -58,7 +58,7 @@ export function startWebServer(port = 3001) {
   const session = new Session(socket);
 
   sessions.set(msg.sessionId, session);
-  socketToSession.set(socket, session); // ✅ CRITICAL FIX
+  socketToSession.set(socket, session); 
 
   console.log("Session:", msg.sessionId);
 
@@ -78,10 +78,10 @@ export function startWebServer(port = 3001) {
 
   if (msg.type !== "user_message") return;
 
-  const session = socketToSession.get(socket); // ✅ FIX
+  const session = socketToSession.get(socket); 
 
   if (!session) {
-    console.log("❌ NO SESSION FOUND");
+    console.log(" NO SESSION FOUND");
     return;
   }
 
