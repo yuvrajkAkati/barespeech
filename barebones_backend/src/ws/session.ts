@@ -88,6 +88,7 @@ export class Session {
       this.addAgentMessage(role, fullText);
       this.commitLastUserMessage();
     }
+    return fullText;
   }
 
   private conversation: Message[] = [

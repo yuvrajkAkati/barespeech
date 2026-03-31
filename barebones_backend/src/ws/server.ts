@@ -4,6 +4,7 @@ import type { WSMessage, WSOutgoing } from "./types.js";
 import { EventBus } from "./events.js";
 import { Session } from "./session.js";
 import { constants } from "node:buffer";
+import { db } from "../db.js";
 
 function send(socket: WsWebSocket, payload: WSOutgoing) {
   socket.send(JSON.stringify(payload));
@@ -11,7 +12,7 @@ function send(socket: WsWebSocket, payload: WSOutgoing) {
 
 const sessions = new Map<string, Session>();
 const socketToSession = new Map<WsWebSocket, Session>();
-
+const sessionToConversation = new Map<Session, string | undefined>();
 
 export function startWebServer(port = 3001) {
   const wss = new WebSocketServer({ port });
@@ -30,63 +31,93 @@ export function startWebServer(port = 3001) {
     });
 
     socket.on("close", () => {
-  const session = socketToSession.get(socket);
+        const session = socketToSession.get(socket);
 
-  if (session) {
-    session.interrupt();
-    session.orchestrator.stop();
+        if (session) {
+          session.interrupt();
+          session.orchestrator.stop();
 
-    socketToSession.delete(socket);
+          socketToSession.delete(socket);
+          sessionToConversation.delete(session);
 
-    for (const [id, s] of sessions.entries()) {
-      if (s === session) {
-        sessions.delete(id);
-        break;
-      }
-    }
-  }
-
-  console.log("disconnected");
-});
+          for (const [id, s] of sessions.entries()) {
+            if (s === session) {
+              sessions.delete(id);
+              break;
+            }
+          }
+        }
+        console.log("disconnected");
+    });
   });
 
   
 
-  bus.on("hello", ({ socket, msg }) => {
-  if (msg.type !== "hello") return;
+  bus.on("hello", async ({ socket, msg }) => {
+    if (msg.type !== "hello") return;
 
-  const session = new Session(socket);
+    const session = new Session(socket);
 
-  sessions.set(msg.sessionId, session);
-  socketToSession.set(socket, session); 
+    sessions.set(msg.sessionId, session);
+    socketToSession.set(socket, session);
 
-  console.log("Session:", msg.sessionId);
+    try {
+      const convo = await db.conversation.create({
+        data: {
+          userId: "demo-user",
+        },
+      });
 
-  send(socket, { type: "ack" });
-});
+      // ✅ use convo INSIDE try
+      sessionToConversation.set(session, convo.id);
+
+      console.log("Session:", msg.sessionId, "Conversation:", convo.id);
+
+    } catch (err) {
+      console.error("DB error (conversation):", err);
+    }
+
+    send(socket, { type: "ack" });
+  });
 
   bus.on("interrupt", ({ socket }) => {
-  const session = socketToSession.get(socket); // ✅ FIX
-  if (!session) return;
+    const session = socketToSession.get(socket); // ✅ FIX
+    if (!session) return;
 
-  console.log("interrupted");
-  session.interrupt();
-});
+    console.log("interrupted");
+    session.interrupt();
+  });
 
-  bus.on("user_message", ({ socket, msg }) => {
-  console.log("user message got");
+  bus.on("user_message",async ({ socket, msg }) => {
+    console.log("user message got");
 
-  if (msg.type !== "user_message") return;
+    if (msg.type !== "user_message") return;
 
-  const session = socketToSession.get(socket); 
+    const session = socketToSession.get(socket); 
 
-  if (!session) {
-    console.log(" NO SESSION FOUND");
-    return;
-  }
+    if (!session) {
+      console.log(" NO SESSION FOUND");
+      return;
+    }
 
-  session.orchestrator.onUserMessage(msg.text);
-});
+    const conversationId = sessionToConversation.get(session);
+    try {
+      if (conversationId) {
+        db.message.create({
+            data: {
+              conversationId,
+              role: "user",
+              content: msg.text,
+            },
+          }).catch(err => console.error("DB error:", err));
+      }
+    } catch (err) {
+      console.error("DB error (message):", err);
+    }
+
+
+    session.orchestrator.onUserMessage(msg.text,conversationId);
+  });
 
 
   console.log(`WS server running on ws://localhost:${port}`);

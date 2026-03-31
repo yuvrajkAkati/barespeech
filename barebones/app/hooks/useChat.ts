@@ -2,8 +2,6 @@ import { useEffect, useRef, useState } from "react"
 import { Message,Role } from "../types/chat"
 import { useVoice } from "./useVoice"
 import { useMutation } from "convex/react"
-import { api } from "../../convex/_generated/api"
-import { Id } from "@/convex/_generated/dataModel"
 
 
 
@@ -11,9 +9,6 @@ import { Id } from "@/convex/_generated/dataModel"
 export const useChat = () => {
   const [messages, setMessages] = useState<Message[]>([])
 
-
-  const sendToDB = useMutation(api.messages.sendMessage)
-  const [conversationId, setConversationId] = useState<Id<"conversations">>()
 
 
 
@@ -23,7 +18,8 @@ export const useChat = () => {
   const sentenceBufferRef = useRef("")
   const sentenceQueueRef = useRef<{ text: string; role: Role }[]>([])
   const isProcessingRef = useRef(false)
-
+  
+  
   const { speak, stopSpeaking } = useVoice((text) => {
     sendMessage(text)
   })
@@ -45,13 +41,10 @@ export const useChat = () => {
       const msg = JSON.parse(e.data)
 
       if (msg.type === "token") {
+        const hasEnd = /[.?!]/.test(msg.text)
         sentenceBufferRef.current += msg.text
 
-        if (
-          msg.text.includes(".") ||
-          msg.text.includes("?") ||
-          msg.text.includes("!")
-        ) {
+        if (sentenceBufferRef.current.length > 60){
           const sentence = sentenceBufferRef.current
           sentenceBufferRef.current = ""
 
@@ -158,28 +151,27 @@ export const useChat = () => {
       },
     ])
 
+    let partial = ""
+
     for (let i = 0; i < text.length; i++) {
-      if (cancelRef.current) return
+      if (cancelRef.current) break  // ✅ break, not return
 
       await new Promise((r) => setTimeout(r, 50))
-      
-      if (cancelRef.current) return
-      
+
+      if (cancelRef.current) break
+
+      partial += text[i]
+
       setMessages((prev) => {
         const last = prev[prev.length - 1]
         if (!last) return prev
 
-        const updated = {
-          ...last,
-          content: last.content + text[i],
-        }
-
-        return [...prev.slice(0, -1), updated]
+        return [
+          ...prev.slice(0, -1),
+          { ...last, content: partial },
+        ]
       })
     }
-
-
-    
   }
 
   return {
