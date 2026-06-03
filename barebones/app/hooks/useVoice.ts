@@ -84,7 +84,7 @@ export const useVoice = (onFinalTranscript: (text: string) => void) => {
       const utterance = new SpeechSynthesisUtterance(text)
 
       utterance.lang = "en-US"
-      utterance.rate = role === "agentA" ? 1.05 : 1.1
+      utterance.rate = role === "agentA" ? 1.25 : 1.35
 
       utterance.onend = () => resolve()
       utterance.onerror = () => resolve()

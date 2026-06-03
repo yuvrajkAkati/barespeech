@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from "react"
-import { Message,Role } from "../types/chat"
+import { Message, Role } from "../types/chat"
 import { useVoice } from "./useVoice"
 import { useMutation } from "convex/react"
 
@@ -18,8 +18,8 @@ export const useChat = () => {
   const sentenceBufferRef = useRef("")
   const sentenceQueueRef = useRef<{ text: string; role: Role }[]>([])
   const isProcessingRef = useRef(false)
-  
-  
+  const currentAgentMessageIdRef = useRef<string | null>(null)
+
   const { speak, stopSpeaking } = useVoice((text) => {
     sendMessage(text)
   })
@@ -39,23 +39,76 @@ export const useChat = () => {
 
     ws.onmessage = (e) => {
       const msg = JSON.parse(e.data)
+      if (msg.type === "agent_start") {
+        const id = Date.now().toString()
 
-      if (msg.type === "token") {
-        const hasEnd = /[.?!]/.test(msg.text)
-        sentenceBufferRef.current += msg.text
+        currentAgentMessageIdRef.current = id
 
-        if (sentenceBufferRef.current.length > 60){
-          const sentence = sentenceBufferRef.current
-          sentenceBufferRef.current = ""
+        setMessages((prev) => [
+          ...prev,
+          {
+            id,
+            role: msg.role,
+            content: "",
+          },
+        ])
 
+        return
+      }
+
+      if (msg.type === "agent_end") {
+
+        if (sentenceBufferRef.current.trim()) {
           sentenceQueueRef.current.push({
-            text: sentence,
+            text: sentenceBufferRef.current.trim(),
             role: msg.role,
           })
 
+          sentenceBufferRef.current = ""
+
           processQueue()
         }
+
+        currentAgentMessageIdRef.current = null
+        return
       }
+
+
+      if (msg.type === "token") {
+        const currentId = currentAgentMessageIdRef.current
+
+        if (!currentId) return
+
+        setMessages((prev) =>
+          prev.map((message) =>
+            message.id === currentId
+              ? {
+                ...message,
+                content: message.content + msg.text,
+              }
+              : message
+          )
+        )
+
+        sentenceBufferRef.current += msg.text
+
+        if (
+          sentenceBufferRef.current.length > 120 ||
+          /[.!?]\s*$/.test(sentenceBufferRef.current)
+        ) {
+          sentenceQueueRef.current.push({
+            text: sentenceBufferRef.current.trim(),
+            role: msg.role,
+          })
+
+          sentenceBufferRef.current = ""
+
+          processQueue()
+        }
+
+        return
+      }
+
 
       if (msg.type === "audio_stop") {
         stopSpeaking()
@@ -99,7 +152,7 @@ export const useChat = () => {
       },
     ])
 
-    
+
   }
 
   const interrupt = () => {
@@ -125,11 +178,7 @@ export const useChat = () => {
 
     while (sentenceQueueRef.current.length > 0) {
       const { text, role } = sentenceQueueRef.current.shift()!
-
-      await Promise.all([
-        speakSentence(text, role),
-        revealText(text, role),
-      ])
+      await speakSentence(text, role)
     }
 
     isProcessingRef.current = false
@@ -141,38 +190,38 @@ export const useChat = () => {
     }
   }
 
-  const revealText = async (text: string, role: Role) => {
-    setMessages((prev) => [
-      ...prev,
-      {
-        id: Date.now().toString(),
-        role,
-        content: "",
-      },
-    ])
+  // const revealText = async (text: string, role: Role) => {
+  //   setMessages((prev) => [
+  //     ...prev,
+  //     {
+  //       id: Date.now().toString(),
+  //       role,
+  //       content: "",
+  //     },
+  //   ])
 
-    let partial = ""
+  //   let partial = ""
 
-    for (let i = 0; i < text.length; i++) {
-      if (cancelRef.current) break  // ✅ break, not return
+  //   for (let i = 0; i < text.length; i++) {
+  //     if (cancelRef.current) break  // ✅ break, not return
 
-      await new Promise((r) => setTimeout(r, 50))
+  //     await new Promise((r) => setTimeout(r, 50))
 
-      if (cancelRef.current) break
+  //     if (cancelRef.current) break
 
-      partial += text[i]
+  //     partial += text[i]
 
-      setMessages((prev) => {
-        const last = prev[prev.length - 1]
-        if (!last) return prev
+  //     setMessages((prev) => {
+  //       const last = prev[prev.length - 1]
+  //       if (!last) return prev
 
-        return [
-          ...prev.slice(0, -1),
-          { ...last, content: partial },
-        ]
-      })
-    }
-  }
+  //       return [
+  //         ...prev.slice(0, -1),
+  //         { ...last, content: partial },
+  //       ]
+  //     })
+  //   }
+  // }
 
   return {
     messages,
